@@ -10,7 +10,7 @@ class Aston
   class Attributes
     attr_reader :data
 
-    def initialize(data)
+    def initialize(data = {})
       @data = data
     end
 
@@ -22,10 +22,6 @@ class Aston
       @data[key] = value
     end
 
-    def to_s
-      @data.map { |k, v| "#{k}='#{v}'" }.join(' ')
-    end
-
     def ==(other)
       other.is_a?(Attributes) && @data == other.data
     end
@@ -33,13 +29,21 @@ class Aston
     def size
       @data.size
     end
+
+    def to_s
+      @data.map { |k, v| "#{k}='#{v}'" }.join(' ')
+    end
+
+    def to_json(opts = nil)
+      @data.to_json(opts)
+    end
   end
 
   # Wrapper for content
   class Content
     attr_reader :data
 
-    def initialize(data)
+    def initialize(data = [])
       @data = data
     end
 
@@ -63,6 +67,10 @@ class Aston
 
     def to_s
       @data.map(&:to_s).join("\n")
+    end
+
+    def to_json(opts = nil)
+      @data.to_json(opts)
     end
   end
 
@@ -92,46 +100,55 @@ class Aston
 
   def to_s
     comment = "<!-- Aston:#{__id__}:#{name} -->"
-    opening = @attributes.data.empty? ? "<#{name}>" : ['<', name, *@attributes].join(' ') << '>'
+    opening = @attributes.data.empty? ? "<#{name}>" : ["<#{name}", *@attributes].join(' ') << '>'
     [comment, opening, *@content, "</#{name}>"].join("\n")
+  end
+
+  def to_json(opts = nil)
+    { name: @name, attributes: @attributes, content: @content }.to_json(opts)
+  end
+
+  def self.parse_hash(hash)
+    name = hash.fetch('name', hash.fetch(:name, ''))
+    attributes = hash.fetch('attributes', hash.fetch(:attributes, {}))
+    content = hash.fetch('content', hash.fetch(:content, [])).map do |elem|
+      case elem
+      when String then elem
+      when Hash then Aston.parse_hash(elem)
+      end
+    end
+    Aston.new(name, attributes: attributes, content: content)
   end
 
   def paths
     do_paths([], [])
   end
 
-  def find(name)
-    @content.data.find { |a| a.is_a?(Aston) && a.name == name }
+  def filter(name)
+    @content.data.select { |a| a.is_a?(Aston) && a.name == name }
   end
 
-  def update_in(path, create_intermediate: true, &_block)
-    yield clamber(path, create_intermediate)
+  def update_in(path, create_intermediate: true, &block)
+    clamber(path, create_intermediate).each(&block)
   rescue StandardError => e
     raise Error, e
   end
 
   def put_attribute(path, name, value, create_intermediate: true)
-    tap { clamber(path, create_intermediate)[name] = value }
+    tap { clamber(path, create_intermediate).each { |aston| aston[name] = value } }
   rescue StandardError => e
     raise Error, e
   end
 
-  def put_content(path, aston, create_intermediate: true)
-    tap { clamber(path, create_intermediate) << aston }
+  def put_content(path, content, create_intermediate: true)
+    tap { clamber(path, create_intermediate).each { |aston| aston << content } }
   rescue StandardError => e
     raise Error, e
   end
 
-  def get(path, default: nil)
-    path = fix_path(path)
-    path.reduce(self) do |memo, e|
-      current = memo.find(e)
-
-      case current
-      when NilClass then break default
-      when String then current
-      when Aston then current
-      end
+  def get(path)
+    fix_path(path).reduce([self]) do |memo, e|
+      memo.flat_map { |aston| aston.filter(e) }
     end
   end
 
@@ -149,18 +166,20 @@ class Aston
   private
 
   def clamber(path, create_intermediate)
-    fix_path(path).reduce(self) do |memo, e|
-      current = memo.find(e)
+    fix_path(path).reduce([self]) do |memo, e|
+      memo.flat_map do |aston|
+        aston.filter(e).tap do |currents|
+          next unless currents == []
 
-      case current
-      when NilClass then create_intermediate ? Aston.new(e).tap { |aston| memo << aston } : break
-      when Aston then current
+          value = [Aston.new(e).tap { |n| aston << n }] if create_intermediate
+          break value
+        end
       end
     end
   end
 
   def fix_path(path)
-    path = path.split('.') if path.is_a?(String)
+    # path = path.split('.') if path.is_a?(String)
     raise Error, 'Path must be an array' unless path.is_a?(Array)
 
     path
