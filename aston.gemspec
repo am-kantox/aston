@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description   = 'Hash/JSON is not isomorphic to XML, unless produced with this library'
   spec.homepage      = 'https://github.com/am-kantox/aston'
   spec.license       = 'MIT'
-  spec.required_ruby_version = Gem::Requirement.new('>= 2.3.0')
+  spec.required_ruby_version = Gem::Requirement.new('>= 2.2.0')
 
   spec.metadata['allowed_push_host'] = 'https://rubygems.org'
 
