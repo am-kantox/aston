@@ -14,6 +14,10 @@ class Aston
       @data = data
     end
 
+    def to_hash
+      @data
+    end
+
     def [](key)
       @data[key]
     end
@@ -91,7 +95,7 @@ class Aston
   end
 
   def <<(value)
-    @content << value
+    tap { @content << value }
   end
 
   def ==(other)
@@ -104,8 +108,21 @@ class Aston
     [comment, opening, *@content, "</#{name}>"].join("\n")
   end
 
+  def to_hash(remove_empty: false)
+    {
+      name: @name,
+      attributes: @attributes.to_hash,
+      content: @content.data.map { |e| e.is_a?(Aston) ? e.to_hash(remove_empty: remove_empty) : e }
+    }.tap do |hash|
+      if remove_empty
+        hash.delete(:attributes) if hash[:attributes] == {}
+        hash.delete(:content) if hash[:content] == []
+      end
+    end
+  end
+
   def to_json(opts = nil)
-    { name: @name, attributes: @attributes, content: @content }.to_json(opts)
+    to_hash.to_json(opts)
   end
 
   def self.parse_hash(hash)

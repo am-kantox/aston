@@ -68,4 +68,13 @@ RSpec.describe Aston do
         'name' => 'aston' }
     )
   end
+
+  it '#<<' do
+    a = Aston.new(:aston, attributes: { foo: :bar }) << Aston.new(:foo1) << Aston.new(:foo2)
+    expect(a.to_hash(remove_empty: true)).to eq({
+                                                  attributes: { foo: :bar },
+                                                  content: [{ name: :foo1 }, { name: :foo2 }],
+                                                  name: :aston
+                                                })
+  end
 end
